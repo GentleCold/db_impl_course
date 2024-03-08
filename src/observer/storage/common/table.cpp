@@ -127,12 +127,36 @@ RC Table::destroy(const char* dir) {
   if(rc != RC::SUCCESS) return rc;
 
   //TODO 删除描述表元数据的文件
+  std::string meta_file = table_meta_file(base_dir_.c_str(), dir);
+  remove(meta_file.c_str());
 
   //TODO 删除表数据文件
+  std::string data_file = table_data_file(base_dir_.c_str(), dir);
+  remove(data_file.c_str());
 
   //TODO 清理所有的索引相关文件数据与索引元数据
+  data_buffer_pool_->close_file(file_id_);
 
-  return RC::GENERIC_ERROR;
+  const int index_num = table_meta_.index_num();
+  for (int i = 0; i < index_num; i++) {
+      const IndexMeta *index_meta = table_meta_.index(i);
+      const FieldMeta *field_meta = table_meta_.field(index_meta->field());
+
+      if (field_meta == nullptr) {
+        LOG_ERROR("Found invalid index meta info which has a non-exists field. table=%s, index=%s, field=%s",
+            name(),
+            index_meta->name(),
+            index_meta->field());
+        // skip cleanup
+        //  do all cleanup action in destructive Table function
+        return RC::GENERIC_ERROR;
+      }
+
+      std::string index_file = table_index_file(base_dir_.c_str(), dir, index_meta->name());
+      remove(index_file.c_str());
+  }
+
+  return RC::SUCCESS;
 }
 
 

@@ -8,3 +8,4 @@ deps/libevent/
 .vscode/
 .vscode-server/
 .cache/
+miniob/
