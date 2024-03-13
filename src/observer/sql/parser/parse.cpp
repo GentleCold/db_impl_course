@@ -63,11 +63,50 @@ bool check_date(int y, int m, int d)
   // TODO 根据 y:year,m:month,d:day 校验日期是否合法
   // TODO 合法 return 0
   // TODO 不合法 return 1
-  return 1;
+  if (y < 1970 || y > 2038) {
+      return false;
+  }
+
+  if (m < 1 || m > 12) {
+      return false;
+  }
+
+  if (d < 1) {
+    return false;
+  }
+
+  switch (m) {
+    case 2: // February
+      if ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) { // Leap year
+        if (d > 29) {
+          return false;
+        }
+      } else {
+        if (d > 28) {
+          return false;
+        }
+      }
+      break;
+    case 4: // April
+    case 6: // June
+    case 9: // September
+    case 11: // November
+      if (d > 30) {
+        return false;
+      }
+      break;
+    default: // Other months
+      if (d > 31) {
+        return false;
+      }
+  }
+
+  return true;
 }
 
 int value_init_date(Value *value, const char *v) {
   // TODO 将 value 的 type 属性修改为日期属性:DATES
+  value->type = DATES;
 
   // 从lex的解析中读取 year,month,day
   int y,m,d;
@@ -76,9 +115,16 @@ int value_init_date(Value *value, const char *v) {
   bool b = check_date(y,m,d);
   if(!b) return -1;
   // TODO 将日期转换成整数
+  std::tm date;
+  date.tm_year = y - 1900;
+  date.tm_mon = m - 1;
+  date.tm_mday = d;
+  int timestamp = std::mktime(&date) / 86400;
 
   // TODO 将value 的 data 属性修改为转换后的日期
-
+  int *days_since_epoch = new int;
+  *days_since_epoch = timestamp;
+  value->data = days_since_epoch;
   return 0;
 }
 
