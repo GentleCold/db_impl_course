@@ -12,7 +12,6 @@ See the Mulan PSL v2 for more details. */
 // Created by Meiyi & Wangyunlai on 2021/5/14.
 //
 
-#include <ctime>
 #include "sql/executor/tuple.h"
 #include "storage/common/table.h"
 #include "common/log/log.h"
@@ -258,14 +257,16 @@ void TupleRecordConverter::add_record(const char *record)
       } break;
       case DATES: {
         // TODO 从record中读取存储的日期
-        auto timestamp = *(uint32_t *)(record + field_meta->offset());
+        int timestamp = *(int *)(record + field_meta->offset());
 
         // TODO 将日期转换为满足输出格式的字符串，注意这里月份和天数，不足两位时需要填充0
-        std::time_t time_value = timestamp * 86400;
-        std::tm* tm_date = std::gmtime(&time_value);
-        char *s = new char[11];
-        std::strftime(s, sizeof(s), "%Y-%m-%d", tm_date);
+        int year = timestamp / 10000;
+        int month = (timestamp % 10000) / 100;
+        int day = timestamp % 100;
+
         // TODO 将字符串添加到tuple中
+        char *s = new char[11];
+        std::sprintf(s, "%04d-%02d-%02d", year, month, day);
         tuple.add(s, strlen(s));
 
       }break;

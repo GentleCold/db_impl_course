@@ -115,16 +115,11 @@ int value_init_date(Value *value, const char *v) {
   bool b = check_date(y,m,d);
   if(!b) return -1;
   // TODO 将日期转换成整数
-  std::tm date;
-  date.tm_year = y - 1900;
-  date.tm_mon = m - 1;
-  date.tm_mday = d;
-  int timestamp = std::mktime(&date) / 86400;
+  int time = y * 10000 + m * 100 + d;
 
   // TODO 将value 的 data 属性修改为转换后的日期
-  int *days_since_epoch = new int;
-  *days_since_epoch = timestamp;
-  value->data = days_since_epoch;
+  value->data = malloc(sizeof(int));
+  memcpy(value->data, &time, sizeof(int));
   return 0;
 }
 
