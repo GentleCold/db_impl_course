@@ -121,6 +121,11 @@ class BPManager {
      * 2. 如果lru cache中不存在这个页，则返回nullptr
      */
     
+    int frame_id;
+    if (lrucache.get({file_desc, page_num}, &frame_id)) {
+      return frame + frame_id;
+    }
+
     return nullptr;
   }
 
@@ -130,7 +135,7 @@ class BPManager {
      * 返回frame数组
      */
 
-    return nullptr;
+    return frame;
   }
 
   bool *getAllocated() {
@@ -139,7 +144,7 @@ class BPManager {
      * 返回allocated数组
      */
 
-    return nullptr;
+    return allocated;
   }
   
   void printLruCache();
