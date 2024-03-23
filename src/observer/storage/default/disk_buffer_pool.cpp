@@ -55,15 +55,19 @@ Frame *BPManager::alloc(int file_desc, PageNum page_num) {
   int frame_id = lrucache.size();
   BufferTag key = {file_desc, page_num};
   if (frame_id < size) {
-    lrucache.put(key, frame_id);
-    *(allocated + frame_id) = true;
-    return frame + frame_id;
+    if (lrucache.put(key, frame_id) == RC::SUCCESS) {
+      *(allocated + frame_id) = true;
+      return frame + frame_id;
+    }
   } else {
     BufferTag old_key;
     if (lrucache.getVictim(&old_key, not_pinned, (void*)(this)) == RC::SUCCESS) {
-      lrucache.get(old_key, &frame_id);
-      disk_buffer_pool->flush_block(frame + frame_id);
-      lrucache.victim(old_key, key);
+      if (lrucache.get(old_key, &frame_id) == RC::SUCCESS) {
+        disk_buffer_pool->flush_block(frame + frame_id);
+        lrucache.victim(old_key, key);
+        *(allocated + frame_id) = true;
+        return frame + frame_id;
+      }
     }
   }
 

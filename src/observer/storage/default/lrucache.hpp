@@ -142,6 +142,7 @@ namespace cache {
           _cache_items_list.push_front(std::make_pair(new_key, _cache_items_map[old_key]->second));
           _cache_items_list.erase(_cache_items_map[old_key]);
           _cache_items_map[new_key] = _cache_items_list.begin();
+          _cache_items_map.erase(old_key);
           
           return RC::SUCCESS;
         }

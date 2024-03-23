@@ -122,7 +122,7 @@ class BPManager {
      */
     
     int frame_id;
-    if (lrucache.get({file_desc, page_num}, &frame_id)) {
+    if (lrucache.get({file_desc, page_num}, &frame_id) == RC::SUCCESS) {
       return frame + frame_id;
     }
 
