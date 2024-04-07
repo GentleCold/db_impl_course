@@ -13,6 +13,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "execute_stage.h"
 
+#include <cstdio>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -239,19 +240,19 @@ Tuple merge_tuples(
   // TODO 再依次(orders)添加到大元组(res_tuple)里即可
 
   int i = 0;
-  for (auto &iter : temp_tuples) {
+  for (auto iter = temp_tuples.rbegin(); iter != temp_tuples.rend(); ++iter) {
     int offset = 0;
-    while (offset != iter->values().size()) {
+    while (offset != (*iter)->values().size()) {
       int order = orders[i++];
       if (order == -1) {
         continue;
       }
-      temp_res.insert(temp_res.begin() + order, iter->values()[offset++]);
+      temp_res.insert(temp_res.begin() + order, (*iter)->values()[offset++]);
     }
   }
 
   for (auto &ptr : temp_res) {
-    res_tuple.add(ptr.get());
+    res_tuple.add(ptr);
   }
 
   return res_tuple;
@@ -386,28 +387,25 @@ RC ExecuteStage::do_select(const char *db, const Query *sql,
 
     if (!have_empty)
       while (true) {
-        std::cout << "1";
         Tuple t = merge_tuples(set_index, select_order);
         if (match_join_condition(&t, condition_idxs)) {
           print_tuples.add(std::move(t));
         }
 
-        int tmp = tuple_sets.size() - 1;
+        int tmp = 0;
         ++set_index[tmp];
         while (set_index[tmp] == tuple_sets[tmp].tuples().cend()) {
           set_index[tmp] = tuple_sets[tmp].tuples().cbegin();
-          --tmp;
-          if (tmp < 0)
+          ++tmp;
+          if (tmp == set_index.size())
             break;
           ++set_index[tmp];
         }
 
-        if (tmp < 0) {
+        if (tmp == set_index.size())
           break;
-        }
       }
 
-    std::cout << "2";
     print_tuples.print(ss);
   } else {
     // 当前只查询一张表，直接返回结果即可
