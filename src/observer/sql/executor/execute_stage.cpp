@@ -13,6 +13,8 @@ See the Mulan PSL v2 for more details. */
 
 #include "execute_stage.h"
 
+#include <climits>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -27,6 +29,7 @@ See the Mulan PSL v2 for more details. */
 #include "session/session.h"
 #include "sql/executor/execution_node.h"
 #include "sql/executor/tuple.h"
+#include "sql/executor/value.h"
 #include "storage/common/condition_filter.h"
 #include "storage/common/table.h"
 #include "storage/default/default_handler.h"
@@ -124,81 +127,80 @@ void ExecuteStage::handle_request(common::StageEvent *event) {
   exe_event->push_callback(cb);
 
   switch (sql->flag) {
-    case SCF_SELECT: {  // select
-      RC rc =
-          do_select(current_db, sql, exe_event->sql_event()->session_event());
-      if (rc != RC::SUCCESS) {
-        session_event->set_response("FAILURE\n");
-      }
-      exe_event->done_immediate();
-    } break;
-
-    case SCF_INSERT:
-    case SCF_UPDATE:
-    case SCF_DELETE:
-    case SCF_CREATE_TABLE:
-    case SCF_SHOW_TABLES:
-    case SCF_DESC_TABLE:
-    case SCF_DROP_TABLE:
-    case SCF_CREATE_INDEX:
-    case SCF_DROP_INDEX:
-    case SCF_LOAD_DATA: {
-      StorageEvent *storage_event = new (std::nothrow) StorageEvent(exe_event);
-      if (storage_event == nullptr) {
-        LOG_ERROR("Failed to new StorageEvent");
-        event->done_immediate();
-        return;
-      }
-
-      default_storage_stage_->handle_event(storage_event);
-    } break;
-    case SCF_SYNC: {
-      RC rc = DefaultHandler::get_default().sync();
-      session_event->set_response(strrc(rc));
-      exe_event->done_immediate();
-    } break;
-    case SCF_BEGIN: {
-      session_event->get_client()->session->set_trx_multi_operation_mode(true);
-      session_event->set_response(strrc(RC::SUCCESS));
-      exe_event->done_immediate();
-    } break;
-    case SCF_COMMIT: {
-      Trx *trx = session_event->get_client()->session->current_trx();
-      RC rc = trx->commit();
-      session_event->get_client()->session->set_trx_multi_operation_mode(false);
-      session_event->set_response(strrc(rc));
-      exe_event->done_immediate();
-    } break;
-    case SCF_ROLLBACK: {
-      Trx *trx = session_event->get_client()->session->current_trx();
-      RC rc = trx->rollback();
-      session_event->get_client()->session->set_trx_multi_operation_mode(false);
-      session_event->set_response(strrc(rc));
-      exe_event->done_immediate();
-    } break;
-    case SCF_HELP: {
-      const char *response =
-          "show tables;\n"
-          "desc `table name`;\n"
-          "create table `table name` (`column name` `column type`, ...);\n"
-          "create index `index name` on `table` (`column`);\n"
-          "insert into `table` values(`value1`,`value2`);\n"
-          "update `table` set column=value [where `column`=`value`];\n"
-          "delete from `table` [where `column`=`value`];\n"
-          "select [ * | `columns` ] from `table`;\n";
-      session_event->set_response(response);
-      exe_event->done_immediate();
-    } break;
-    case SCF_EXIT: {
-      // do nothing
-      const char *response = "Unsupported\n";
-      session_event->set_response(response);
-      exe_event->done_immediate();
-    } break;
-    default: {
-      exe_event->done_immediate();
-      LOG_ERROR("Unsupported command=%d\n", sql->flag);
+  case SCF_SELECT: { // select
+    RC rc = do_select(current_db, sql, exe_event->sql_event()->session_event());
+    if (rc != RC::SUCCESS) {
+      session_event->set_response("FAILURE\n");
     }
+    exe_event->done_immediate();
+  } break;
+
+  case SCF_INSERT:
+  case SCF_UPDATE:
+  case SCF_DELETE:
+  case SCF_CREATE_TABLE:
+  case SCF_SHOW_TABLES:
+  case SCF_DESC_TABLE:
+  case SCF_DROP_TABLE:
+  case SCF_CREATE_INDEX:
+  case SCF_DROP_INDEX:
+  case SCF_LOAD_DATA: {
+    StorageEvent *storage_event = new (std::nothrow) StorageEvent(exe_event);
+    if (storage_event == nullptr) {
+      LOG_ERROR("Failed to new StorageEvent");
+      event->done_immediate();
+      return;
+    }
+
+    default_storage_stage_->handle_event(storage_event);
+  } break;
+  case SCF_SYNC: {
+    RC rc = DefaultHandler::get_default().sync();
+    session_event->set_response(strrc(rc));
+    exe_event->done_immediate();
+  } break;
+  case SCF_BEGIN: {
+    session_event->get_client()->session->set_trx_multi_operation_mode(true);
+    session_event->set_response(strrc(RC::SUCCESS));
+    exe_event->done_immediate();
+  } break;
+  case SCF_COMMIT: {
+    Trx *trx = session_event->get_client()->session->current_trx();
+    RC rc = trx->commit();
+    session_event->get_client()->session->set_trx_multi_operation_mode(false);
+    session_event->set_response(strrc(rc));
+    exe_event->done_immediate();
+  } break;
+  case SCF_ROLLBACK: {
+    Trx *trx = session_event->get_client()->session->current_trx();
+    RC rc = trx->rollback();
+    session_event->get_client()->session->set_trx_multi_operation_mode(false);
+    session_event->set_response(strrc(rc));
+    exe_event->done_immediate();
+  } break;
+  case SCF_HELP: {
+    const char *response =
+        "show tables;\n"
+        "desc `table name`;\n"
+        "create table `table name` (`column name` `column type`, ...);\n"
+        "create index `index name` on `table` (`column`);\n"
+        "insert into `table` values(`value1`,`value2`);\n"
+        "update `table` set column=value [where `column`=`value`];\n"
+        "delete from `table` [where `column`=`value`];\n"
+        "select [ * | `columns` ] from `table`;\n";
+    session_event->set_response(response);
+    exe_event->done_immediate();
+  } break;
+  case SCF_EXIT: {
+    // do nothing
+    const char *response = "Unsupported\n";
+    session_event->set_response(response);
+    exe_event->done_immediate();
+  } break;
+  default: {
+    exe_event->done_immediate();
+    LOG_ERROR("Unsupported command=%d\n", sql->flag);
+  }
   }
 }
 
@@ -214,27 +216,62 @@ void end_trx_if_need(Session *session, Trx *trx, bool all_right) {
 
 std::string agg_to_string(Aggregation agg) {
   std::string res = "";
-  //TODO 构造聚合函数名字
+  // TODO 构造聚合函数名字
   switch (agg.func_name) {
-    //TODO AGG_MAX
-    //TODO AGG_MIN
-    //TODO AGG_COUNT
-    //TODO AGG_AVG
+    // TODO AGG_MAX
+  case AGG_MAX: {
+    res = "MAX";
+    break;
   }
+  // TODO AGG_MIN
+  case AGG_MIN: {
+    res = "MIN";
+    break;
+  }
+    // TODO AGG_COUNT
+  case AGG_COUNT: {
+    res = "COUNT";
+    break;
+  }
+    // TODO AGG_AVG
+  case AGG_AVG: {
+    res = "AVG";
+    break;
+  }
+  }
+
   res += "(";
   if (1 == agg.is_value) {
     AttrType type = agg.value->type;
     void *val = agg.value->data;
     std::string str;
-    //TODO 构造输出表达字符串
+    // TODO 构造输出表达字符串
     switch (type) {
-      //TODO INT
-      //TODO FLOAT
-      //TODO DATES
+      // TODO INT
+    case INTS: {
+      res += std::to_string(*(int *)val);
+      break;
     }
-  }
-  else{
-    //TODO 如果有relation_name和field_name的话也要添加
+      // TODO FLOAT
+    case FLOATS: {
+      res += std::to_string(*(float *)val);
+      break;
+    }
+      // TODO DATES
+    case DATES: {
+      res += std::to_string(*(int *)val);
+      break;
+    }
+    }
+  } else {
+    if (agg.attribute.relation_name) {
+      res += agg.attribute.relation_name;
+      res += ".";
+      res += agg.attribute.attribute_name;
+    } else {
+      res += agg.attribute.attribute_name;
+    }
+    // TODO 如果有relation_name和field_name的话也要添加
   }
   res += ")";
   return res;
@@ -243,31 +280,113 @@ std::string agg_to_string(Aggregation agg) {
 void aggregation_exec(const Selects &selects, TupleSet *res_tuples) {
   if (selects.aggregation_num > 0) {
     TupleSchema agg_schema;
-    //TODO 设置schema
-    //TODO 依次添加字段值
+    // TODO 设置schema
+    // TODO 依次添加字段值
+    for (size_t i = 0; i < selects.aggregation_num; i++) {
+      agg_schema.add(INTS, agg_to_string(selects.aggregations[i]).c_str(),
+                     agg_to_string(selects.aggregations[i]).c_str());
+    }
     Tuple out;
     for (size_t i = 0; i < selects.aggregation_num; i++) {
       const Aggregation &agg = selects.aggregations[i];
       const std::vector<Tuple> &tuples = res_tuples->tuples();
+      auto &schema = res_tuples->get_schema();
+      std::shared_ptr<TupleValue> aggre;
       switch (agg.func_name) {
-        case FuncName::AGG_MAX:
-        case FuncName::AGG_MIN: {
-          //TODO 遍历所有元组，获取最值
-          //TODO 增加这条记录
+      case FuncName::AGG_MAX: {
+        std::shared_ptr<TupleValue> agg_val = nullptr;
+        for (auto &tuple : tuples) {
+          std::shared_ptr<TupleValue> val;
+          if (agg.attribute.relation_name) {
+            val = tuple.get_pointer(schema.index_of_field(
+                agg.attribute.relation_name, agg.attribute.attribute_name));
+          } else {
+            for (int i = 0; i < tuple.size(); ++i) {
+              if (strcmp(schema.fields()[i].field_name(),
+                         agg.attribute.attribute_name) == 0) {
+                val = tuple.get_pointer(i);
+              }
+            }
+          }
+
+          if (agg_val == nullptr) {
+            agg_val = val;
+          } else {
+            if (val->compare(*agg_val) < 0) {
+              agg_val = val;
+            }
+          }
         }
-        case FuncName::AGG_COUNT: {
-          // 值为size的大小
-          //TODO 增加这条记录
+        out.add(agg_val);
+        break;
+      }
+
+      case FuncName::AGG_MIN: {
+        // TODO 遍历所有元组，获取最值
+        // TODO 增加这条记录
+        std::shared_ptr<TupleValue> agg_val = nullptr;
+        for (auto &tuple : tuples) {
+          std::shared_ptr<TupleValue> val;
+          if (agg.attribute.relation_name) {
+            val = tuple.get_pointer(schema.index_of_field(
+                agg.attribute.relation_name, agg.attribute.attribute_name));
+          } else {
+            for (int i = 0; i < tuple.size(); ++i) {
+              if (strcmp(schema.fields()[i].field_name(),
+                         agg.attribute.attribute_name) == 0) {
+                val = tuple.get_pointer(i);
+              }
+            }
+          }
+
+          if (agg_val == nullptr) {
+            agg_val = val;
+          } else {
+            if (val->compare(*agg_val) > 0) {
+              agg_val = val;
+            }
+          }
         }
-        case FuncName::AGG_AVG: {
-          //TODO 遍历所有元组，获取和
-          float sum = 0;
-          //TODO 增加这条记录
-          break;
+        out.add(agg_val);
+        break;
+      }
+      case FuncName::AGG_COUNT: {
+        // 值为size的大小
+        // TODO 增加这条记录
+        out.add((int)tuples.size());
+        break;
+      }
+      case FuncName::AGG_AVG: {
+        // TODO 遍历所有元组，获取和
+        float sum = 0;
+        // TODO 增加这条记录
+        std::shared_ptr<TupleValue> agg_val = nullptr;
+        for (auto &tuple : tuples) {
+          std::shared_ptr<TupleValue> val;
+          if (agg.attribute.relation_name) {
+            val = tuple.get_pointer(schema.index_of_field(
+                agg.attribute.relation_name, agg.attribute.attribute_name));
+          } else {
+            for (int i = 0; i < tuple.size(); ++i) {
+              if (strcmp(schema.fields()[i].field_name(),
+                         agg.attribute.attribute_name) == 0) {
+                val = tuple.get_pointer(i);
+              }
+            }
+          }
+
+          if (agg_val->get_type() == INTS) {
+            sum += std::dynamic_pointer_cast<IntValue>(val)->get_value();
+          } else if (agg_val->get_type() == FLOATS) {
+            sum += std::dynamic_pointer_cast<FloatValue>(val)->get_value();
+          }
         }
+        out.add(sum / tuples.size());
+        break;
+      }
       }
     }
-    //等所有值都计算完再去清除res
+    // 等所有值都计算完再去清除res
     res_tuples->clear();
     res_tuples->set_schema(agg_schema);
     res_tuples->add(std::move(out));
@@ -281,7 +400,7 @@ bool match_join_condition(const Tuple *res_tuple,
   // res_tuple 是 需要进行筛选的某一行
   // condition_idxs 是 C x 3 数组
   // 每一条的3个元素代表（左值的属性在新schema的下标，CompOp运算符，右值的属性在新schema的下标）
-  //TODO 判断表中某一行 res_tuple 是否满足多表联查条件即：左值=右值
+  // TODO 判断表中某一行 res_tuple 是否满足多表联查条件即：左值=右值
 
   return true;
 }
@@ -292,8 +411,8 @@ Tuple merge_tuples(
     std::vector<int> orders) {
   std::vector<std::shared_ptr<TupleValue>> temp_res;
   Tuple res_tuple;
-  //TODO 先把每个字段都放到对应的位置上(temp_res)
-  //TODO 再依次(orders)添加到大元组(res_tuple)里即可
+  // TODO 先把每个字段都放到对应的位置上(temp_res)
+  // TODO 再依次(orders)添加到大元组(res_tuple)里即可
 }
 
 // 这里没有对输入的某些信息做合法性校验，比如查询的列名、where条件中的列名等，没有做必要的合法性校验
@@ -315,7 +434,7 @@ RC ExecuteStage::do_select(const char *db, const Query *sql,
     rc = create_selection_executor(trx, selects, db, table_name, *select_node);
     if (rc != RC::SUCCESS) {
       delete select_node;
-      for (SelectExeNode *&tmp_node: select_nodes) {
+      for (SelectExeNode *&tmp_node : select_nodes) {
         delete tmp_node;
       }
       end_trx_if_need(session, trx, false);
@@ -330,11 +449,11 @@ RC ExecuteStage::do_select(const char *db, const Query *sql,
   }
 
   std::vector<TupleSet> tuple_sets;
-  for (SelectExeNode *&node: select_nodes) {
+  for (SelectExeNode *&node : select_nodes) {
     TupleSet tuple_set;
     rc = node->execute(tuple_set);
     if (rc != RC::SUCCESS) {
-      for (SelectExeNode *&tmp_node: select_nodes) {
+      for (SelectExeNode *&tmp_node : select_nodes) {
         delete tmp_node;
       }
       end_trx_if_need(session, trx, false);
@@ -351,8 +470,8 @@ RC ExecuteStage::do_select(const char *db, const Query *sql,
     TupleSchema join_schema;
     TupleSchema old_schema;
     for (std::vector<TupleSet>::const_reverse_iterator
-                 rit = tuple_sets.rbegin(),
-                 rend = tuple_sets.rend();
+             rit = tuple_sets.rbegin(),
+             rend = tuple_sets.rend();
          rit != rend; ++rit) {
       // 这里是某张表投影完的所有字段，如果是select * from t1,t2;
       // old_schema=[t1.a, t1.b, t2.a, t2.b]
@@ -360,10 +479,11 @@ RC ExecuteStage::do_select(const char *db, const Query *sql,
     }
 
     std::vector<int> select_order;
-    //TODO 根据列名输出顺序，添加 old_schema 对应字段到 join_schema 中，并构建select_order数组
-    // 如果是select * ，添加所有字段
-    // 如果是select t1.*，表名匹配的加入字段
-    // 如果是select t1.age，表名+字段名匹配的加入字段
+    // TODO 根据列名输出顺序，添加 old_schema 对应字段到 join_schema
+    // 中，并构建select_order数组
+    //  如果是select * ，添加所有字段
+    //  如果是select t1.*，表名匹配的加入字段
+    //  如果是select t1.age，表名+字段名匹配的加入字段
     print_tuples.set_schema(join_schema);
 
     // 构建联查的conditions需要找到对应的表
@@ -372,8 +492,7 @@ RC ExecuteStage::do_select(const char *db, const Query *sql,
     std::vector<std::vector<int>> condition_idxs;
     for (size_t i = 0; i < selects.condition_num; i++) {
       const Condition &condition = selects.conditions[i];
-      if (condition.left_is_attr == 1 &&
-          condition.right_is_attr == 1) {
+      if (condition.left_is_attr == 1 && condition.right_is_attr == 1) {
         std::vector<int> temp_con;
         const char *l_table_name = condition.left_attr.relation_name;
         const char *l_field_name = condition.left_attr.attribute_name;
@@ -381,31 +500,31 @@ RC ExecuteStage::do_select(const char *db, const Query *sql,
         const char *r_table_name = condition.right_attr.relation_name;
         const char *r_field_name = condition.right_attr.attribute_name;
         temp_con.push_back(print_tuples.get_schema().index_of_field(
-                l_table_name, l_field_name));
+            l_table_name, l_field_name));
         temp_con.push_back(comp);
         temp_con.push_back(print_tuples.get_schema().index_of_field(
-                r_table_name, r_field_name));
+            r_table_name, r_field_name));
         condition_idxs.push_back(temp_con);
       }
     }
-    //TODO 元组的拼接需要实现笛卡尔积
-    //TODO 将符合连接条件的元组添加到print_tables中
+    // TODO 元组的拼接需要实现笛卡尔积
+    // TODO 将符合连接条件的元组添加到print_tables中
 
-    //TODO 添加聚合算子
-      print_tuples.print(ss);
-    } else {
-    //TODO 添加聚合算子
-    // 当前只查询一张表，直接返回结果即可
-      tuple_sets.front().print(ss);
-    }
-    for (SelectExeNode *&tmp_node: select_nodes) {
-      delete tmp_node;
-    }
-    session_event->set_response(ss.str());
-    end_trx_if_need(session, trx, true);
-    return rc;
+    // TODO 添加聚合算子
+    print_tuples.print(ss);
+  } else {
+    // TODO 添加聚合算子
+    //  当前只查询一张表，直接返回结果即可
+    aggregation_exec(selects, &tuple_sets[0]);
+    tuple_sets.front().print(ss);
+  }
+  for (SelectExeNode *&tmp_node : select_nodes) {
+    delete tmp_node;
+  }
+  session_event->set_response(ss.str());
+  end_trx_if_need(session, trx, true);
+  return rc;
 }
-
 
 bool match_table(const Selects &selects, const char *table_name_in_condition,
                  const char *table_name_to_match) {
@@ -485,13 +604,13 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db,
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
 
-  //如果是聚合函数：count/min/max/avg(PARAMETER)，直接select PARAMETER
+  // 如果是聚合函数：count/min/max/avg(PARAMETER)，直接select PARAMETER
   if (selects.aggregation_num > 0 && selects.attr_num == 0) {
     for (int i = selects.aggregation_num - 1; i >= 0; i--) {
       if (1 == selects.aggregations[i].is_value) {
         // 列出这张表所有字段
         TupleSchema::from_table(table, schema);
-        break;  // 没有校验，给出* 之后，再写字段的错误
+        break; // 没有校验，给出* 之后，再写字段的错误
       }
       const RelAttr &attr = selects.aggregations[i].attribute;
       if (nullptr == attr.relation_name ||
@@ -509,7 +628,7 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db,
         }
       }
     }
-  } else {  // 正常的投影操作
+  } else { // 正常的投影操作
     for (int i = selects.attr_num - 1; i >= 0; i--) {
       const RelAttr &attr = selects.attributes[i];
       if (nullptr == attr.relation_name ||
@@ -517,7 +636,7 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db,
         if (0 == strcmp("*", attr.attribute_name)) {
           // 列出这张表所有字段
           TupleSchema::from_table(table, schema);
-          break;  // 没有校验，给出* 之后，再写字段的错误
+          break; // 没有校验，给出* 之后，再写字段的错误
         } else {
           // 列出这张表相关字段
           RC rc = schema_add_field(table, attr.attribute_name, schema);
@@ -534,17 +653,17 @@ RC create_selection_executor(Trx *trx, const Selects &selects, const char *db,
   for (size_t i = 0; i < selects.condition_num; i++) {
     const Condition &condition = selects.conditions[i];
     if ((condition.left_is_attr == 0 &&
-         condition.right_is_attr == 0) ||  // 两边都是值
+         condition.right_is_attr == 0) || // 两边都是值
         (condition.left_is_attr == 1 && condition.right_is_attr == 0 &&
          match_table(selects, condition.left_attr.relation_name,
-                     table_name)) ||  // 左边是属性右边是值
+                     table_name)) || // 左边是属性右边是值
         (condition.left_is_attr == 0 && condition.right_is_attr == 1 &&
          match_table(selects, condition.right_attr.relation_name,
-                     table_name)) ||  // 左边是值，右边是属性名
+                     table_name)) || // 左边是值，右边是属性名
         (condition.left_is_attr == 1 && condition.right_is_attr == 1 &&
          match_table(selects, condition.left_attr.relation_name, table_name) &&
          match_table(selects, condition.right_attr.relation_name,
-                     table_name))  // 左右都是属性名，并且表名都符合
+                     table_name)) // 左右都是属性名，并且表名都符合
     ) {
       DefaultConditionFilter *condition_filter = new DefaultConditionFilter();
       RC rc = condition_filter->init(*table, condition);
