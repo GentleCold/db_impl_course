@@ -283,7 +283,7 @@ void aggregation_exec(const Selects &selects, TupleSet *res_tuples) {
     // TODO 设置schema
     // TODO 依次添加字段值
     for (size_t i = 0; i < selects.aggregation_num; i++) {
-      agg_schema.add(INTS, agg_to_string(selects.aggregations[i]).c_str(),
+      agg_schema.add(INTS, res_tuples->get_schema().fields()[0].table_name(),
                      agg_to_string(selects.aggregations[i]).c_str());
     }
     Tuple out;
@@ -312,7 +312,7 @@ void aggregation_exec(const Selects &selects, TupleSet *res_tuples) {
           if (agg_val == nullptr) {
             agg_val = val;
           } else {
-            if (val->compare(*agg_val) < 0) {
+            if (val->compare(*agg_val) > 0) {
               agg_val = val;
             }
           }
@@ -342,7 +342,7 @@ void aggregation_exec(const Selects &selects, TupleSet *res_tuples) {
           if (agg_val == nullptr) {
             agg_val = val;
           } else {
-            if (val->compare(*agg_val) > 0) {
+            if (val->compare(*agg_val) < 0) {
               agg_val = val;
             }
           }
@@ -360,7 +360,6 @@ void aggregation_exec(const Selects &selects, TupleSet *res_tuples) {
         // TODO 遍历所有元组，获取和
         float sum = 0;
         // TODO 增加这条记录
-        std::shared_ptr<TupleValue> agg_val = nullptr;
         for (auto &tuple : tuples) {
           std::shared_ptr<TupleValue> val;
           if (agg.attribute.relation_name) {
@@ -375,9 +374,9 @@ void aggregation_exec(const Selects &selects, TupleSet *res_tuples) {
             }
           }
 
-          if (agg_val->get_type() == INTS) {
+          if (val->get_type() == INTS) {
             sum += std::dynamic_pointer_cast<IntValue>(val)->get_value();
-          } else if (agg_val->get_type() == FLOATS) {
+          } else if (val->get_type() == FLOATS) {
             sum += std::dynamic_pointer_cast<FloatValue>(val)->get_value();
           }
         }

@@ -1,0 +1,5 @@
+create table t1(id int, amount float);
+insert into t1 values (0, 0.5), (1, 1.0), (2, 1.5);
+select min(amount), max(amount), avg(amount) from t1;
+select min(id), max(id), avg(id) from t1;
+select count(1), count(*), count(id) from t1;
