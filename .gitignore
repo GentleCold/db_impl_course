@@ -1,0 +1,7 @@
+./cmake-build-debug
+./.idea
+.cache
+build
+miniob
+*.log
+observer.log.*

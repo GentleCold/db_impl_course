@@ -1,0 +1,5 @@
+create table test(id int, name char);
+insert into test values(1, 'a');
+insert into test values(2, 'b');
+insert into test values(3, 'c');
+select * from test order by id desc;
