@@ -229,7 +229,7 @@ void orderby_exec(const Selects &selects, TupleSet *res_tuples) {
           // same column and table
           if (strcmp(desc.attribute_name, fields[j].field_name()) == 0 &&
               (desc.relation_name == nullptr ||
-               strcmp(desc.relation_name, fields[j].table_name()))) {
+               strcmp(desc.relation_name, fields[j].table_name()) == 0)) {
             order_index = j;
             break;
           }

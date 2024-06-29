@@ -1,5 +1,21 @@
 create table test(id int, name char);
-insert into test values(1, 'a');
+
+insert into test values(1, 'c');
+insert into test values(3, 'a');
 insert into test values(2, 'b');
 insert into test values(3, 'c');
+
 select * from test order by id desc;
+select * from test order by id asc;
+
+select * from test order by id asc, name asc;
+
+create table test2(id int, amount int);
+
+insert into test2 values(1, 1);
+insert into test2 values(3, 3);
+insert into test2 values(2, 2);
+
+select * from test, test2 where test.id = test2.id order by id asc;
+select * from test, test2 where test.id = test2.id order by id desc;
+select * from test, test2 where test.id = test2.id order by test.name desc;
