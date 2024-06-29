@@ -313,7 +313,9 @@ RC ExecuteStage::do_select(const char *db, Query *sql,
   Session *session = session_event->get_client()->session;
   Trx *trx = session->current_trx();
   const Selects &selects = sql->sstr.selection;
-  // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select 执行节点
+
+  // 把所有的表和只跟这张表关联的condition都拿出来，生成最底层的select
+  // 执行节点
   std::vector<SelectExeNode *> select_nodes;
   for (size_t i = 0; i < selects.relation_num; i++) {
     const char *table_name = selects.relations[i];
@@ -329,7 +331,6 @@ RC ExecuteStage::do_select(const char *db, Query *sql,
     }
     select_nodes.push_back(select_node);
   }
-
   if (select_nodes.empty()) {
     LOG_ERROR("No table given");
     end_trx_if_need(session, trx, false);
@@ -352,8 +353,107 @@ RC ExecuteStage::do_select(const char *db, Query *sql,
   }
 
   std::stringstream ss;
+  TupleSet print_tuples;
   if (tuple_sets.size() > 1) {
     // 本次查询了多张表，需要做join操作
+    TupleSchema join_schema;
+    TupleSchema old_schema;
+    for (std::vector<TupleSet>::const_reverse_iterator
+             rit = tuple_sets.rbegin(),
+             rend = tuple_sets.rend();
+         rit != rend; ++rit) {
+      // 这里是某张表投影完的所有字段，如果是select * from t1,t2;
+      // old_schema=[t1.a, t1.b, t2.a, t2.b]
+      old_schema.append(rit->get_schema());
+    }
+
+    std::vector<int> select_order;
+    // TODO 根据列名输出顺序，添加 old_schema 对应字段到 join_schema
+    // 中，并构建select_order数组
+    //  如果是select * ，添加所有字段
+    //  如果是select t1.*，表名匹配的加入字段
+    //  如果是select t1.age，表名+字段名匹配的加入字段
+
+    auto fileds = old_schema.fields();
+    int index = 0;
+    for (const auto &f : fileds) {
+      bool if_match = false;
+      for (int i = 0; i < selects.attr_num; i++) {
+        auto attribute = selects.attributes[i];
+        if (*attribute.attribute_name == '*' ||
+            (*f.table_name() == *attribute.relation_name &&
+             (*attribute.attribute_name == '*' ||
+              *f.field_name() == *attribute.attribute_name))) {
+          if_match = true;
+          join_schema.add(f);
+          select_order.push_back(index++);
+          break;
+        }
+      }
+
+      if (!if_match) {
+        select_order.push_back(-1);
+      }
+    }
+
+    print_tuples.set_schema(join_schema);
+
+    // 构建联查的conditions需要找到对应的表
+    // C x 3 数组
+    // 每一条的3个元素代表（左值的属性在新schema的下标，CompOp运算符，右值的属性在新schema的下标）
+    std::vector<std::vector<int>> condition_idxs;
+    for (size_t i = 0; i < selects.condition_num; i++) {
+      const Condition &condition = selects.conditions[i];
+      if (condition.left_is_attr == 1 && condition.right_is_attr == 1) {
+        std::vector<int> temp_con;
+        const char *l_table_name = condition.left_attr.relation_name;
+        const char *l_field_name = condition.left_attr.attribute_name;
+        const CompOp comp = condition.comp;
+        const char *r_table_name = condition.right_attr.relation_name;
+        const char *r_field_name = condition.right_attr.attribute_name;
+        temp_con.push_back(print_tuples.get_schema().index_of_field(
+            l_table_name, l_field_name));
+        temp_con.push_back(comp);
+        temp_con.push_back(print_tuples.get_schema().index_of_field(
+            r_table_name, r_field_name));
+        condition_idxs.push_back(temp_con);
+      }
+    }
+    // TODO 元组的拼接需要实现笛卡尔积
+    // TODO 将符合连接条件的元组添加到print_tables中
+    std::vector<std::vector<Tuple>::const_iterator> set_index;
+    bool have_empty = false;
+    for (auto &set : tuple_sets) {
+      if (set.tuples().empty()) {
+        have_empty = true;
+        break;
+      }
+      set_index.push_back(set.tuples().cbegin());
+    }
+
+    if (!have_empty)
+      while (true) {
+        Tuple t = merge_tuples(set_index, select_order);
+        if (match_join_condition(&t, condition_idxs)) {
+          print_tuples.add(std::move(t));
+        }
+
+        int tmp = 0;
+        ++set_index[tmp];
+        while (set_index[tmp] == tuple_sets[tmp].tuples().cend()) {
+          set_index[tmp] = tuple_sets[tmp].tuples().cbegin();
+          ++tmp;
+          if (tmp == set_index.size())
+            break;
+          ++set_index[tmp];
+        }
+
+        if (tmp == set_index.size())
+          break;
+      }
+
+    orderby_exec(selects, &print_tuples);
+    print_tuples.print(ss);
   } else {
     // 当前只查询一张表，直接返回结果即可
     orderby_exec(selects, &tuple_sets[0]);
