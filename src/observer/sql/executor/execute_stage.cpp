@@ -258,6 +258,51 @@ void orderby_exec(const Selects &selects, TupleSet *res_tuples) {
   }
 }
 
+// 需要满足多表联查条件
+bool match_join_condition(const Tuple *res_tuple,
+                          const std::vector<std::vector<int>> condition_idxs) {
+  // res_tuple 是 需要进行筛选的某一行
+  // condition_idxs 是 C x 3 数组
+  // 每一条的3个元素代表（左值的属性在新schema的下标，CompOp运算符，右值的属性在新schema的下标）
+  // TODO 判断表中某一行 res_tuple 是否满足多表联查条件即：左值=右值
+
+  for (auto &idxs : condition_idxs) {
+    if (res_tuple->get(idxs[0]).compare(res_tuple->get(idxs[2]))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// 将多段小元组合成一个大元组
+Tuple merge_tuples(
+    const std::vector<std::vector<Tuple>::const_iterator> temp_tuples,
+    std::vector<int> orders) {
+  std::vector<std::shared_ptr<TupleValue>> temp_res;
+  Tuple res_tuple;
+  // TODO 先把每个字段都放到对应的位置上(temp_res)
+  // TODO 再依次(orders)添加到大元组(res_tuple)里即可
+
+  int i = 0;
+  for (auto iter = temp_tuples.rbegin(); iter != temp_tuples.rend(); ++iter) {
+    int offset = 0;
+    while (offset != (*iter)->values().size()) {
+      int order = orders[i++];
+      if (order == -1) {
+        continue;
+      }
+      temp_res.insert(temp_res.begin() + order, (*iter)->values()[offset++]);
+    }
+  }
+
+  for (auto &ptr : temp_res) {
+    res_tuple.add(ptr);
+  }
+
+  return res_tuple;
+}
+
 // 这里没有对输入的某些信息做合法性校验，比如查询的列名、where条件中的列名等，没有做必要的合法性校验
 // 需要补充上这一部分.
 // 校验部分也可以放在resolve，不过跟execution放一起也没有关系
